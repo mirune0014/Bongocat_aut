@@ -94,7 +94,7 @@ class BongoApp(tk.Tk):
                 cfg = json.loads(CFG_PATH.read_text(encoding="utf-8"))
                 self.click_x.set(cfg.get("x", 0))
                 self.click_y.set(cfg.get("y", 0))
-                self.click_count.set(cfg.get("count", 1))
+                self.click_count.set(cfg.get("count", 3))
                 self.click_interval.set(cfg.get("interval", 0.2))
                 self.period_min.set(cfg.get("period_min", 31))
             except Exception as e:
@@ -194,7 +194,7 @@ class BongoApp(tk.Tk):
                     time.sleep(float(self.click_interval.get()))
                 if not self.running:
                     break
-                self._log(f"クリック実行: 座標=({x}, {y}) 今回={burst}回 累計={self.total_clicks}回")
+                self._log(f"クリック実行: 座標=({x}, {y}) 今回={burst/3}回 累計={self.total_clicks/3}回")
 
                 # 所定の間隔だけ待つ（早めの停止に反応するため細切れにsleep）
                 total = float(self.period_min.get()) * 60.0
