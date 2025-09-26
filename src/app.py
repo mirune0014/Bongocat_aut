@@ -4,6 +4,9 @@ import time
 import json
 import logging
 from pathlib import Path
+import sys
+import ctypes
+from ctypes import wintypes
 import tkinter as tk
 from tkinter import ttk, messagebox
 import pyautogui
@@ -35,6 +38,7 @@ class BongoApp(tk.Tk):
         self.click_count = tk.IntVar(value=3)      # 1回あたりのクリック数
         self.click_interval = tk.DoubleVar(value=0.2)  # 連打間隔（秒）
         self.period_min = tk.DoubleVar(value=31)   # 繰り返し間隔（分）
+        self.total_clicks = 0
 
         self._load_config()
         self._build_ui()
@@ -106,6 +110,43 @@ class BongoApp(tk.Tk):
         )
         CFG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    # 画面ホットコーナー（任意モニターの左上）での緊急停止検出
+    def _enum_monitor_rects(self):
+        rects = []
+        if sys.platform == "win32":
+            try:
+                MonitorEnumProc = ctypes.WINFUNCTYPE(
+                    wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM
+                )
+
+                def _callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+                    r = lprcMonitor.contents
+                    rects.append((r.left, r.top, r.right, r.bottom))
+                    return True
+
+                ctypes.windll.user32.EnumDisplayMonitors(0, 0, MonitorEnumProc(_callback), 0)
+            except Exception:
+                pass
+
+        # フォールバック（プライマリのみ）
+        if not rects:
+            try:
+                w, h = pyautogui.size()
+                rects.append((0, 0, w, h))
+            except Exception:
+                rects.append((0, 0, 0, 0))
+        return rects
+
+    def _hotcorner_triggered(self, threshold: int = 5) -> bool:
+        try:
+            x, y = pyautogui.position()
+        except Exception:
+            return False
+        for left, top, right, bottom in self._enum_monitor_rects():
+            if x <= left + threshold and y <= top + threshold:
+                return True
+        return False
+
     # 機能
     def pick_position(self):
         self._log("5秒後に現在のマウス座標を取得します。")
@@ -141,16 +182,30 @@ class BongoApp(tk.Tk):
             try:
                 # クリックバースト
                 x, y = self.click_x.get(), self.click_y.get()
-                for _ in range(int(self.click_count.get())):
+                burst = int(self.click_count.get())
+                for _ in range(burst):
+                    # ホットコーナー（任意モニター左上）検出で緊急停止
+                    if self._hotcorner_triggered():
+                        self._log("緊急停止（ホットコーナー検出）")
+                        self.running = False
+                        break
                     pyautogui.click(x, y)
+                    self.total_clicks += 1
                     time.sleep(float(self.click_interval.get()))
-                self._log(f"クリック実行: ({x}, {y})")
+                if not self.running:
+                    break
+                self._log(f"クリック実行: 座標=({x}, {y}) 今回={burst}回 累計={self.total_clicks}回")
 
                 # 所定の間隔だけ待つ（早めの停止に反応するため細切れにsleep）
                 total = float(self.period_min.get()) * 60.0
                 step = 0.5
                 waited = 0.0
                 while self.running and waited < total:
+                    # ホットコーナー監視（待機中でも即停止）
+                    if self._hotcorner_triggered():
+                        self._log("緊急停止（ホットコーナー検出）")
+                        self.running = False
+                        break
                     time.sleep(step)
                     waited += step
             except pyautogui.FailSafeException:
