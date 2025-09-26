@@ -94,7 +94,7 @@ class BongoApp(tk.Tk):
                 cfg = json.loads(CFG_PATH.read_text(encoding="utf-8"))
                 self.click_x.set(cfg.get("x", 0))
                 self.click_y.set(cfg.get("y", 0))
-                self.click_count.set(cfg.get("count", 3))
+                self.click_count.set(cfg.get("count", 1))
                 self.click_interval.set(cfg.get("interval", 0.2))
                 self.period_min.set(cfg.get("period_min", 31))
             except Exception as e:
